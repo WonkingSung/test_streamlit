@@ -8,7 +8,7 @@ plt.rcParams['font.family'] = 'Apple SD Gothic Neo'  # Mac
 plt.rcParams['axes.unicode_minus'] = False
 
 # ------------------- 데이터 불러오기 -------------------
-file_path = "201512_202412_주민등록인구및세대현황_연간 (1).csv"
+file_path = "data.csv"
 
 # 1차 시도: UTF-8-SIG
 try:
