@@ -6,7 +6,7 @@ st.title("📊 주민등록 인구 및 세대 현황 (2015~2024)")
 
 @st.cache_data
 def load_data():
-    file_path = "201512_202412_주민등록인구및세대현황_연간 (1).csv"
+    file_path = "data.csv"
     # UTF-8-SIG 기본, 실패 시 CP949
     try:
         return pd.read_csv(file_path, encoding='utf-8-sig')
