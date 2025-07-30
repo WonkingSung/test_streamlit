@@ -8,7 +8,7 @@ plt.rcParams['font.family'] = 'Apple SD Gothic Neo'  # Mac
 plt.rcParams['axes.unicode_minus'] = False
 
 # ------------------- 데이터 불러오기 -------------------
-file_path = "201512_202412_주민등록인구및세대현황_연간 (1).csv"
+file_path = "data.csv"
 df = pd.read_csv(file_path, encoding='cp949')
 
 # 연도별 인구 컬럼만 추출
