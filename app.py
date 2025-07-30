@@ -1,82 +1,127 @@
-# app.py  ──────────────────────────────────────────────
-"""
-Streamlit WordCloud App
-- packages.txt에 'fonts-nanum' 라이브러리를 설치한다는 가정
-- 프로젝트 내에 별도 TTF를 올리지 않아도 자동으로 시스템 글꼴(NanumGothic 등)을 찾음
-"""
-import io, sys, hashlib, urllib.request, matplotlib as mpl
-from pathlib import Path
-
-import matplotlib.pyplot as plt
 import streamlit as st
-from wordcloud import WordCloud
+import pandas as pd
+import matplotlib.pyplot as plt
 
-# ─────────────────────────────────────────────────────
-# 1. 한글 글꼴 경로 탐색: 시스템·컨테이너 패키지 우선
-# ─────────────────────────────────────────────────────
-def get_korean_font() -> str | None:
-    """사용 가능한 한글 글꼴 파일(TTF/TTC) 경로를 반환 (없으면 None)."""
-    # 1) Debian/Ubuntu fonts-nanum 또는 Noto CJK 패키지 경로
-    linux_candidates = [
-        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
-        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-    ]
-    # 2) macOS 기본 글꼴
-    mac_path = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
+# ------------------- 한글 폰트 설정 -------------------
+plt.rcParams['font.family'] = 'Apple SD Gothic Neo'  # Mac
+# plt.rcParams['font.family'] = 'Malgun Gothic'      # Windows
+plt.rcParams['axes.unicode_minus'] = False
 
-    # 3) 프로젝트 내부 fonts/ 폴더(옵션)
-    local_font = Path(__file__).parent / "fonts" / "NanumGothic.ttf"
-    priority_paths = (*linux_candidates, mac_path, str(local_font))
+# ------------------- 데이터 불러오기 -------------------
+file_path = "201512_202412_주민등록인구및세대현황_연간 (1).csv"
+df = pd.read_csv(file_path, encoding='cp949')
 
-    for p in priority_paths:
-        if Path(p).exists():
-            return str(p)
-    return None
+# 연도별 인구 컬럼만 추출
+population_cols = [col for col in df.columns if "거주자 인구수" in col]
 
-FONT_PATH = get_korean_font()
+# NaN 안전하게 정수 변환
+df_numeric = df.copy()
+for col in population_cols:
+    df_numeric[col] = (
+        df_numeric[col]
+        .astype(str)
+        .str.replace(",", "")
+        .replace("nan", "0")
+        .replace("", "0")
+        .astype(float)
+        .astype(int)
+    )
 
-# (옵션) 시스템에 글꼴이 없다면 런타임으로 NanumGothic 다운로드 & 캐싱
-if FONT_PATH is None:
-    CACHE_DIR = Path.home() / ".cache" / "streamlit_fonts"
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    url = "https://github.com/naver/nanumfont/raw/master/ttf/NanumGothic.ttf"
-    fname = hashlib.md5(url.encode()).hexdigest() + ".ttf"
-    FONT_PATH = str(CACHE_DIR / fname)
-    if not Path(FONT_PATH).exists():  # 첫 실행 시만 다운로드
-        urllib.request.urlretrieve(url, FONT_PATH)
+# ------------------- Streamlit UI -------------------
+st.title("📊 주민등록 인구 및 세대 현황 (2015~2024)")
 
-# Matplotlib에도 동일 글꼴 적용
-mpl.rcParams["font.family"] = Path(FONT_PATH).stem.split(".")[0]
+tab1, tab2, tab3 = st.tabs(
+    ["📈 개별 지역 분석", "🔥 인구 변동 상위 5개 지역", "📊 증가/감소 지역 분석"]
+)
 
-# ─────────────────────────────────────────────────────
-# 2. Streamlit UI
-# ─────────────────────────────────────────────────────
-st.set_page_config(page_title="실시간 워드클라우드", layout="centered")
-st.title("🎈 실시간 워드클라우드 생성기")
+# ======================= TAB 1 : 개별 지역 분석 =======================
+with tab1:
+    region_list = df['행정구역'].unique()
+    selected_region = st.selectbox("행정구역 선택", region_list)
 
-user_text = st.text_area("텍스트 입력", height=200)
+    # 선택된 지역 데이터
+    region_data = df_numeric[df_numeric['행정구역'] == selected_region]
 
-if st.button("워드클라우드 생성") and user_text.strip():
-    wc = WordCloud(
-        font_path=FONT_PATH,
-        width=800,
-        height=400,
-        background_color="white",
-        max_words=200,
-        random_state=42,
-    ).generate(user_text)
+    # 표 출력
+    st.subheader("📋 선택 지역 데이터")
+    st.dataframe(df[df['행정구역'] == selected_region])  # 원본 표 (콤마 유지)
 
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.imshow(wc, interpolation="bilinear")
-    ax.axis("off")
+    # 연도별 인구 시각화
+    population = region_data[population_cols].iloc[0]
+    years = [col.split("_")[0] for col in population_cols]
+
+    fig, ax = plt.subplots()
+    ax.plot(years, population, marker='o')
+    ax.set_xlabel("연도")
+    ax.set_ylabel("인구수")
+    ax.set_title(f"{selected_region} 연도별 인구 추이")
+    plt.xticks(rotation=45)
     st.pyplot(fig)
 
-    # 다운로드 버튼
-    buf = io.BytesIO()
-    wc.to_image().save(buf, format="PNG")
-    st.download_button(
-        label="📥 PNG로 다운로드",
-        data=buf.getvalue(),
-        file_name="wordcloud.png",
-        mime="image/png",
-    )
+# ======================= TAB 2 : 인구 변동 상위 5개 지역 =======================
+with tab2:
+    st.subheader("🔥 인구 변동 폭 상위 5개 지역")
+
+    # 변동폭 계산
+    df_numeric['인구변동폭'] = df_numeric[population_cols].max(axis=1) - df_numeric[population_cols].min(axis=1)
+
+    # 상위 5개 지역
+    top5 = df_numeric.nlargest(5, '인구변동폭')
+    top5_names = top5['행정구역'].tolist()
+    st.write("**상위 5개 지역:**", ", ".join(top5_names))
+
+    # 연도별 합산 인구
+    top5_sum = top5[population_cols].sum()
+    years = [col.split("_")[0] for col in population_cols]
+
+    # 합산 그래프
+    fig2, ax2 = plt.subplots()
+    ax2.plot(years, top5_sum, marker='o', color='red', label='상위 5개 지역 합계')
+    ax2.set_xlabel("연도")
+    ax2.set_ylabel("총 인구수")
+    ax2.set_title("연도별 인구 합계 (상위 5개 변동 지역)")
+    ax2.legend()
+    plt.xticks(rotation=45)
+    st.pyplot(fig2)
+
+    # 개별 그래프
+    fig3, ax3 = plt.subplots()
+    for idx, row in top5.iterrows():
+        ax3.plot(years, row[population_cols], marker='o', label=row['행정구역'])
+    ax3.set_xlabel("연도")
+    ax3.set_ylabel("인구수")
+    ax3.set_title("상위 5개 변동 지역 연도별 인구 추이")
+    ax3.legend(fontsize=8)
+    plt.xticks(rotation=45)
+    st.pyplot(fig3)
+
+# ======================= TAB 3 : 증가 / 감소 지역 분석 =======================
+with tab3:
+    st.subheader("📊 2015년 대비 2024년 인구 증감 분석")
+
+    # 2015년 / 2024년 인구
+    start_pop = df_numeric[population_cols[0]]
+    end_pop = df_numeric[population_cols[-1]]
+    df_numeric['증감'] = end_pop - start_pop
+
+    # 상위 5개 증가 / 감소 지역
+    top5_increase = df_numeric.nlargest(5, '증감')
+    top5_decrease = df_numeric.nsmallest(5, '증감')
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("### 📈 인구 증가 상위 5개 지역")
+        st.dataframe(top5_increase[['행정구역', '증감']])
+    with col2:
+        st.markdown("### 📉 인구 감소 상위 5개 지역")
+        st.dataframe(top5_decrease[['행정구역', '증감']])
+
+    # 그래프 시각화
+    fig4, ax4 = plt.subplots()
+    ax4.bar(top5_increase['행정구역'], top5_increase['증감'], color='green', label='증가')
+    ax4.bar(top5_decrease['행정구역'], top5_decrease['증감'], color='red', label='감소')
+    ax4.set_ylabel("인구 증감수")
+    ax4.set_title("상위 5개 증가 / 감소 지역 비교")
+    ax4.legend()
+    plt.xticks(rotation=45)
+    st.pyplot(fig4)
