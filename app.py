@@ -8,9 +8,23 @@ plt.rcParams['font.family'] = 'Apple SD Gothic Neo'  # Mac
 plt.rcParams['axes.unicode_minus'] = False
 
 # ------------------- 데이터 불러오기 -------------------
-file_path = "data.csv"
-df = pd.read_csv(file_path, encoding='cp949')
+file_path = "201512_202412_주민등록인구및세대현황_연간 (1).csv"
 
+# 1차 시도: UTF-8-SIG
+try:
+    df = pd.read_csv(file_path, encoding='utf-8-sig')
+except UnicodeDecodeError:
+    # 2차 시도: CP949
+    try:
+        df = pd.read_csv(file_path, encoding='cp949')
+    except UnicodeDecodeError:
+        # 3차 시도: 자동 감지
+        import chardet
+        with open(file_path, 'rb') as f:
+            encoding = chardet.detect(f.read(100000))['encoding']
+        df = pd.read_csv(file_path, encoding=encoding)
+
+# ------------------- 데이터 전처리 -------------------
 # 연도별 인구 컬럼만 추출
 population_cols = [col for col in df.columns if "거주자 인구수" in col]
 
