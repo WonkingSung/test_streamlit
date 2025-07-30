@@ -1,4 +1,1 @@
-fonts-nanum
-fonts-nanum-extra        # 추가 서체 (Bold, Pen 등)
-# 또는
-# fonts-noto-cjk          # Noto Sans KR 계열
+
